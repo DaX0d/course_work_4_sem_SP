@@ -1,0 +1,8 @@
+{
+  "name": "prog",
+  "version": "0.1.0",
+  "dependencies": [
+    "nlohmann-json",
+    "boost-container"
+  ]
+}
