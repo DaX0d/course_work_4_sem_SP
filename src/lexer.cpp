@@ -5,35 +5,35 @@
 namespace db {
 
 static const std::unordered_map<std::string, TokenType> KEYWORDS = {
-    {"CREATE",   TokenType::KW_CREATE},
-    {"DROP",     TokenType::KW_DROP},
-    {"USE",      TokenType::KW_USE},
+    {"CREATE", TokenType::KW_CREATE},
+    {"DROP", TokenType::KW_DROP},
+    {"USE", TokenType::KW_USE},
     {"DATABASE", TokenType::KW_DATABASE},
-    {"TABLE",    TokenType::KW_TABLE},
-    {"INSERT",   TokenType::KW_INSERT},
-    {"INTO",     TokenType::KW_INTO},
-    {"VALUE",    TokenType::KW_VALUE},
-    {"UPDATE",   TokenType::KW_UPDATE},
-    {"SET",      TokenType::KW_SET},
-    {"WHERE",    TokenType::KW_WHERE},
-    {"DELETE",   TokenType::KW_DELETE},
-    {"SELECT",   TokenType::KW_SELECT},
-    {"FROM",     TokenType::KW_FROM},
-    {"AS",       TokenType::KW_AS},
-    {"AND",      TokenType::KW_AND},
-    {"OR",       TokenType::KW_OR},
-    {"NOT",      TokenType::KW_NOT},
-    {"NULL",     TokenType::KW_NULL},
-    {"BETWEEN",  TokenType::KW_BETWEEN},
-    {"LIKE",     TokenType::KW_LIKE},
+    {"TABLE", TokenType::KW_TABLE},
+    {"INSERT", TokenType::KW_INSERT},
+    {"INTO", TokenType::KW_INTO},
+    {"VALUE", TokenType::KW_VALUE},
+    {"UPDATE", TokenType::KW_UPDATE},
+    {"SET", TokenType::KW_SET},
+    {"WHERE", TokenType::KW_WHERE},
+    {"DELETE", TokenType::KW_DELETE},
+    {"SELECT", TokenType::KW_SELECT},
+    {"FROM", TokenType::KW_FROM},
+    {"AS", TokenType::KW_AS},
+    {"AND", TokenType::KW_AND},
+    {"OR", TokenType::KW_OR},
+    {"NOT", TokenType::KW_NOT},
+    {"NULL", TokenType::KW_NULL},
+    {"BETWEEN", TokenType::KW_BETWEEN},
+    {"LIKE", TokenType::KW_LIKE},
     {"NOT_NULL", TokenType::KW_NOT_NULL},
-    {"INDEXED",  TokenType::KW_INDEXED},
-    {"DEFAULT",  TokenType::KW_DEFAULT},
-    {"SUM",      TokenType::KW_SUM},
-    {"COUNT",    TokenType::KW_COUNT},
-    {"AVG",      TokenType::KW_AVG},
-    {"INT",      TokenType::KW_INT},
-    {"STRING",   TokenType::KW_STRING},
+    {"INDEXED", TokenType::KW_INDEXED},
+    {"DEFAULT", TokenType::KW_DEFAULT},
+    {"SUM", TokenType::KW_SUM},
+    {"COUNT", TokenType::KW_COUNT},
+    {"AVG", TokenType::KW_AVG},
+    {"INT", TokenType::KW_INT},
+    {"STRING", TokenType::KW_STRING},
 };
 
 Lexer::Lexer(std::string input) : _input(std::move(input)) {}
@@ -47,7 +47,7 @@ char Lexer::peek(size_t ahead) const {
 char Lexer::advance() {
     char c = _input[_pos++];
     if (c == '\n') { ++_line; _col = 1; }
-    else           { ++_col; }
+    else { ++_col; }
     return c;
 }
 
@@ -80,11 +80,11 @@ Token Lexer::read_string_literal() {
         if (c == '\\') {
             char esc = advance();
             switch (esc) {
-                case 'n':  val += '\n'; break;
-                case 't':  val += '\t'; break;
-                case '"':  val += '"';  break;
+                case 'n': val += '\n'; break;
+                case 't': val += '\t'; break;
+                case '"': val += '"';  break;
                 case '\\': val += '\\'; break;
-                default:   val += esc;  break;
+                default: val += esc;  break;
             }
         } else {
             val += c;
@@ -129,14 +129,14 @@ Token Lexer::read_operator_or_punct() {
     size_t ln = _line, cl = _col;
     char c = advance();
     switch (c) {
-        case '(': return {TokenType::LPAREN,    "(", ln, cl};
-        case ')': return {TokenType::RPAREN,    ")", ln, cl};
-        case ',': return {TokenType::COMMA,     ",", ln, cl};
+        case '(': return {TokenType::LPAREN, "(", ln, cl};
+        case ')': return {TokenType::RPAREN, ")", ln, cl};
+        case ',': return {TokenType::COMMA, ",", ln, cl};
         case ';': return {TokenType::SEMICOLON, ";", ln, cl};
-        case '*': return {TokenType::STAR,      "*", ln, cl};
-        case '.': return {TokenType::DOT,       ".", ln, cl};
+        case '*': return {TokenType::STAR, "*", ln, cl};
+        case '.': return {TokenType::DOT, ".", ln, cl};
         case '=':
-            if (peek() == '=') { advance(); return {TokenType::OP_EQ,  "==", ln, cl}; }
+            if (peek() == '=') { advance(); return {TokenType::OP_EQ, "==", ln, cl}; }
             return {TokenType::OP_ASSIGN, "=", ln, cl};
         case '!':
             if (peek() == '=') { advance(); return {TokenType::OP_NEQ, "!=", ln, cl}; }

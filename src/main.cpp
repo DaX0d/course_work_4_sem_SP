@@ -58,10 +58,10 @@ static void print_result(const QueryResult& res) {
 static bool run_input(const std::string& input, Executor& exec, bool interactive) {
     bool ok = true;
     try {
-        Lexer  lex(input);
-        auto   tokens = lex.tokenize();
+        Lexer lex(input);
+        auto tokens = lex.tokenize();
         Parser parser(std::move(tokens));
-        auto   stmts  = parser.parse_all();
+        auto stmts  = parser.parse_all();
 
         for (const auto& stmt : stmts) {
             QueryResult res = exec.execute(stmt);
@@ -83,7 +83,7 @@ static bool run_input(const std::string& input, Executor& exec, bool interactive
 
 int main(int argc, char* argv[]) {
     StorageManager sm("./data");
-    Executor       exec(sm);
+    Executor exec(sm);
 
     if (argc >= 2) {
         // Script mode: ./prog script.txt

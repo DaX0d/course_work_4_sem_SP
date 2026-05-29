@@ -17,7 +17,6 @@ public:
     virtual void insert(const ColumnValue& key, int64_t row_id) = 0;
     virtual void erase (const ColumnValue& key, int64_t row_id) = 0;
     virtual std::vector<int64_t> find_equal(const ColumnValue& key) const = 0;
-    // find all row_ids where lo <= col_value < hi
     virtual std::vector<int64_t> find_range(const ColumnValue& lo,
                                             const ColumnValue& hi) const = 0;
     virtual void clear() = 0;
@@ -26,21 +25,21 @@ public:
 // Main table: B_tree<row_id, Row> persisted as JSON on disk (task: disk storage).
 // String values are deduplicated via StringPool (task 2).
 class Table {
-    TableSchema                              _schema;
-    B_tree<int64_t, Row>                     _data;   // primary storage
+    TableSchema _schema;
+    B_tree<int64_t, Row> _data;   // primary storage
 
     struct IndexEntry {
-        size_t                    col_idx;
+        size_t col_idx;
         std::unique_ptr<IndexBase> index;
     };
     std::vector<IndexEntry> _indexes;
 
     std::filesystem::path _path;
-    bool                  _dirty = false;
-    StringPool&           _pool;  // task 2
+    bool _dirty = false;
+    StringPool& _pool;  // task 2
 
     void rebuild_indexes();
-    void add_to_indexes   (int64_t row_id, const Row& row);
+    void add_to_indexes(int64_t row_id, const Row& row);
     void remove_from_indexes(int64_t row_id, const Row& row);
 
 public:
@@ -52,7 +51,7 @@ public:
     int64_t insert_row(Row row);
     // Returns false if row_id not found
     bool update_row(int64_t row_id, const Row& new_row);
-    bool erase_row (int64_t row_id);
+    bool erase_row(int64_t row_id);
 
     std::optional<Row> find_row(int64_t row_id) const;
 
@@ -62,7 +61,7 @@ public:
     // Index-assisted lookup (equality)
     std::vector<int64_t> index_lookup(size_t col_idx, const ColumnValue& val) const;
     // Index-assisted range [lo, hi)
-    std::vector<int64_t> index_range (size_t col_idx,
+    std::vector<int64_t> index_range(size_t col_idx,
                                       const ColumnValue& lo,
                                       const ColumnValue& hi) const;
     bool has_index(size_t col_idx) const noexcept;
@@ -73,7 +72,7 @@ public:
     void load();
 
     bool dirty() const noexcept { return _dirty; }
-    void mark_dirty()           { _dirty = true; }
+    void mark_dirty() { _dirty = true; }
 };
 
 } // namespace db

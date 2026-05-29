@@ -7,10 +7,6 @@
 
 namespace db {
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Concrete index implementations (private to this translation unit)
-// ─────────────────────────────────────────────────────────────────────────────
-
 class IntIndex final : public IndexBase {
     B_tree<int64_t, std::vector<int64_t>> _tree;
 
@@ -106,10 +102,6 @@ public:
     void clear() override { _tree.clear(); }
 };
 
-// ─────────────────────────────────────────────────────────────────────────────
-// JSON serialisation helpers (implements task 2 string interning)
-// ─────────────────────────────────────────────────────────────────────────────
-
 static nlohmann::json col_to_json(const ColumnValue& v, StringPool& pool) {
     if (is_null(v))   return nullptr;
     if (is_int(v))    return get_int(v);
@@ -137,20 +129,20 @@ static ColumnValue col_from_json(const nlohmann::json& j,
 
 static nlohmann::json schema_to_json(const TableSchema& s) {
     nlohmann::json j;
-    j["name"]    = s.name;
+    j["name"] = s.name;
     j["next_id"] = s.next_id;
     nlohmann::json cols = nlohmann::json::array();
     for (const auto& c : s.columns) {
         nlohmann::json cj;
-        cj["name"]     = c.name;
-        cj["type"]     = (c.type == ColumnType::INT) ? "int" : "string";
+        cj["name"] = c.name;
+        cj["type"] = (c.type == ColumnType::INT) ? "int" : "string";
         cj["not_null"] = c.not_null;
-        cj["indexed"]  = c.indexed;
+        cj["indexed"] = c.indexed;
         if (c.default_val) {
             const auto& dv = *c.default_val;
-            if (is_null(dv))        cj["default"] = nullptr;
-            else if (is_int(dv))    cj["default"] = get_int(dv);
-            else                    cj["default"] = get_string(dv);
+            if (is_null(dv)) cj["default"] = nullptr;
+            else if (is_int(dv)) cj["default"] = get_int(dv);
+            else cj["default"] = get_string(dv);
         } else {
             cj["default"] = nullptr;
         }
@@ -162,14 +154,14 @@ static nlohmann::json schema_to_json(const TableSchema& s) {
 
 static TableSchema schema_from_json(const nlohmann::json& j) {
     TableSchema s;
-    s.name    = j["name"];
+    s.name = j["name"];
     s.next_id = j["next_id"];
     for (const auto& cj : j["columns"]) {
         ColumnDef cd;
-        cd.name     = cj["name"];
-        cd.type     = (cj["type"] == "int") ? ColumnType::INT : ColumnType::STRING;
+        cd.name = cj["name"];
+        cd.type = (cj["type"] == "int") ? ColumnType::INT : ColumnType::STRING;
         cd.not_null = cj["not_null"];
-        cd.indexed  = cj["indexed"];
+        cd.indexed = cj["indexed"];
         if (!cj["default"].is_null()) {
             if (cd.type == ColumnType::INT)
                 cd.default_val = static_cast<int64_t>(cj["default"].get<int64_t>());
@@ -180,10 +172,6 @@ static TableSchema schema_from_json(const nlohmann::json& j) {
     }
     return s;
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Table
-// ─────────────────────────────────────────────────────────────────────────────
 
 Table::Table(TableSchema schema, std::filesystem::path path, StringPool& pool)
     : _schema(std::move(schema)), _path(std::move(path)), _pool(pool)
@@ -202,8 +190,6 @@ Table::Table(TableSchema schema, std::filesystem::path path, StringPool& pool)
 
     if (std::filesystem::exists(_path)) load();
 }
-
-// ── private helpers ──────────────────────────────────────────────────────────
 
 void Table::rebuild_indexes() {
     for (auto& e : _indexes) e.index->clear();
@@ -224,8 +210,6 @@ void Table::remove_from_indexes(int64_t row_id, const Row& row) {
             e.index->erase(row[e.col_idx], row_id);
     }
 }
-
-// ── public API ───────────────────────────────────────────────────────────────
 
 int64_t Table::insert_row(Row row) {
     int64_t id = _schema.next_id++;
@@ -287,8 +271,6 @@ bool Table::has_index(size_t col_idx) const noexcept {
     return false;
 }
 
-// ── persistence ──────────────────────────────────────────────────────────────
-
 void Table::save() {
     nlohmann::json j;
     j["schema"] = schema_to_json(_schema);
@@ -347,8 +329,6 @@ void Table::load() {
     rebuild_indexes();
     _dirty = false;
 }
-
-// ── display helper ────────────────────────────────────────────────────────────
 
 std::string column_value_to_display(const ColumnValue& v) {
     if (is_null(v))   return "NULL";

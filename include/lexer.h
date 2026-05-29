@@ -6,25 +6,16 @@
 namespace db {
 
 enum class TokenType {
-    // ── database commands ──────────────────────────────────────────
     KW_CREATE, KW_DROP, KW_USE, KW_DATABASE, KW_TABLE,
-    // ── DML ────────────────────────────────────────────────────────
     KW_INSERT, KW_INTO, KW_VALUE, KW_UPDATE, KW_SET,
     KW_WHERE,  KW_DELETE, KW_SELECT, KW_FROM, KW_AS,
-    // ── conditions ─────────────────────────────────────────────────
     KW_AND, KW_OR, KW_NOT, KW_NULL, KW_BETWEEN, KW_LIKE,
-    // ── column constraints ─────────────────────────────────────────
     KW_NOT_NULL, KW_INDEXED, KW_DEFAULT,
-    // ── aggregate functions (task 12) ─────────────────────────────
     KW_SUM, KW_COUNT, KW_AVG,
-    // ── column types ───────────────────────────────────────────────
     KW_INT, KW_STRING,
-    // ── literals ───────────────────────────────────────────────────
-    LIT_INT,    // e.g. 42
-    LIT_STRING, // e.g. "hello"
-    // ── identifier ─────────────────────────────────────────────────
+    LIT_INT,
+    LIT_STRING,
     IDENT,
-    // ── operators ──────────────────────────────────────────────────
     OP_EQ,     // ==
     OP_NEQ,    // !=
     OP_LT,     // <
@@ -32,22 +23,20 @@ enum class TokenType {
     OP_LE,     // <=
     OP_GE,     // >=
     OP_ASSIGN, // =
-    // ── punctuation ────────────────────────────────────────────────
     LPAREN,    // (
     RPAREN,    // )
     COMMA,     // ,
     SEMICOLON, // ;
     STAR,      // *
     DOT,       // .
-    // ── end of input ───────────────────────────────────────────────
     END
 };
 
 struct Token {
-    TokenType   type;
-    std::string value; // text for IDENT / LIT_INT / LIT_STRING
-    size_t      line = 1;
-    size_t      col  = 1;
+    TokenType type;
+    std::string value;
+    size_t line = 1;
+    size_t col  = 1;
 };
 
 class LexError : public std::runtime_error {
@@ -57,9 +46,9 @@ public:
 
 class Lexer {
     std::string _input;
-    size_t      _pos  = 0;
-    size_t      _line = 1;
-    size_t      _col  = 1;
+    size_t _pos  = 0;
+    size_t _line = 1;
+    size_t _col  = 1;
 
 public:
     explicit Lexer(std::string input);

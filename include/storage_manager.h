@@ -8,9 +8,9 @@
 namespace db {
 
 class StorageManager {
-    std::filesystem::path                              _data_root;
+    std::filesystem::path _data_root;
     std::unordered_map<std::string, std::unique_ptr<Database>> _databases;
-    std::string                                        _current_db;
+    std::string _current_db;
 
     void discover_databases();
 
@@ -19,15 +19,15 @@ public:
     ~StorageManager();
 
     void create_database(const std::string& name);
-    void drop_database  (const std::string& name);
-    void use_database   (const std::string& name);
+    void drop_database(const std::string& name);
+    void use_database(const std::string& name);
 
-    Database*          current_db();
+    Database* current_db();
     const std::string& current_db_name() const noexcept { return _current_db; }
-    bool               has_current_db()  const noexcept { return !_current_db.empty(); }
+    bool has_current_db() const noexcept { return !_current_db.empty(); }
 
     Database* get_database(const std::string& name);
-    bool      has_database(const std::string& name) const;
+    bool has_database(const std::string& name) const;
 };
 
 } // namespace db

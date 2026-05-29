@@ -40,8 +40,8 @@
 
 ```
 include/
-  b_tree.h              — B-дерево (предоставлено)
-  associative_container.h / pp_allocator.h — вспомогательные (предоставлены)
+  b_tree.h              — B-дерево
+  associative_container.h / pp_allocator.h
   types.h               — базовые типы (ColumnValue, Row)
   schema.h              — схема таблицы
   table.h / database.h / storage_manager.h — слои хранилища

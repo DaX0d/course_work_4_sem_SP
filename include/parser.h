@@ -15,7 +15,7 @@ public:
 // parse_all() returns all statements found before END.
 class Parser {
     std::vector<Token> _tokens;
-    size_t             _pos = 0;
+    size_t _pos = 0;
 
 public:
     explicit Parser(std::vector<Token> tokens);
@@ -26,10 +26,10 @@ private:
     const Token& peek(size_t ahead = 0) const;
     const Token& consume();
     const Token& expect(TokenType t);
-    bool         check (TokenType t) const;
-    bool         match (TokenType t);
+    bool check(TokenType t) const;
+    bool match(TokenType t);
 
-    Statement    parse_statement();
+    Statement parse_statement();
 
     // DB-level
     Statement parse_create();
@@ -38,13 +38,13 @@ private:
 
     // DDL
     CreateTableStmt parse_create_table();
-    ColDefNode      parse_col_def();
+    ColDefNode parse_col_def();
 
     // DML
-    InsertStmt  parse_insert();
-    UpdateStmt  parse_update();
-    DeleteStmt  parse_delete();
-    SelectStmt  parse_select();
+    InsertStmt parse_insert();
+    UpdateStmt parse_update();
+    DeleteStmt parse_delete();
+    SelectStmt parse_select();
 
     SelectCol   parse_select_col();
 

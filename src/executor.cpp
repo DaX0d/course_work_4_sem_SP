@@ -10,29 +10,22 @@ namespace db {
 
 Executor::Executor(StorageManager& sm) : _sm(sm) {}
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Public entry
-// ─────────────────────────────────────────────────────────────────────────────
 
 QueryResult Executor::execute(const Statement& stmt) {
     return std::visit([this](const auto& s) -> QueryResult {
         using T = std::decay_t<decltype(s)>;
         if      constexpr (std::is_same_v<T, CreateDatabaseStmt>) return exec_create_db(s);
-        else if constexpr (std::is_same_v<T, DropDatabaseStmt>)   return exec_drop_db(s);
-        else if constexpr (std::is_same_v<T, UseDatabaseStmt>)    return exec_use(s);
-        else if constexpr (std::is_same_v<T, CreateTableStmt>)    return exec_create_tbl(s);
-        else if constexpr (std::is_same_v<T, DropTableStmt>)      return exec_drop_tbl(s);
-        else if constexpr (std::is_same_v<T, InsertStmt>)         return exec_insert(s);
-        else if constexpr (std::is_same_v<T, UpdateStmt>)         return exec_update(s);
-        else if constexpr (std::is_same_v<T, DeleteStmt>)         return exec_delete(s);
-        else if constexpr (std::is_same_v<T, SelectStmt>)         return exec_select(s);
+        else if constexpr (std::is_same_v<T, DropDatabaseStmt>) return exec_drop_db(s);
+        else if constexpr (std::is_same_v<T, UseDatabaseStmt>) return exec_use(s);
+        else if constexpr (std::is_same_v<T, CreateTableStmt>) return exec_create_tbl(s);
+        else if constexpr (std::is_same_v<T, DropTableStmt>) return exec_drop_tbl(s);
+        else if constexpr (std::is_same_v<T, InsertStmt>) return exec_insert(s);
+        else if constexpr (std::is_same_v<T, UpdateStmt>) return exec_update(s);
+        else if constexpr (std::is_same_v<T, DeleteStmt>) return exec_delete(s);
+        else if constexpr (std::is_same_v<T, SelectStmt>) return exec_select(s);
         else return QueryResult{false, "Unknown statement type"};
     }, stmt);
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// Database management
-// ─────────────────────────────────────────────────────────────────────────────
 
 QueryResult Executor::exec_create_db(const CreateDatabaseStmt& s) {
     try {
@@ -62,10 +55,6 @@ QueryResult Executor::exec_use(const UseDatabaseStmt& s) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DDL
-// ─────────────────────────────────────────────────────────────────────────────
-
 QueryResult Executor::exec_create_tbl(const CreateTableStmt& s) {
     try {
         Database* db = _sm.current_db();
@@ -73,10 +62,10 @@ QueryResult Executor::exec_create_tbl(const CreateTableStmt& s) {
         schema.name = s.table_name;
         for (const auto& cd : s.columns) {
             ColumnDef def;
-            def.name        = cd.name;
-            def.type        = cd.type;
-            def.not_null    = cd.not_null;
-            def.indexed     = cd.indexed;
+            def.name = cd.name;
+            def.type = cd.type;
+            def.not_null = cd.not_null;
+            def.indexed = cd.indexed;
             def.default_val = cd.default_val;
             schema.columns.push_back(std::move(def));
         }
@@ -98,10 +87,6 @@ QueryResult Executor::exec_drop_tbl(const DropTableStmt& s) {
         return {false, e.what()};
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// INSERT
-// ─────────────────────────────────────────────────────────────────────────────
 
 QueryResult Executor::exec_insert(const InsertStmt& s) {
     try {
@@ -163,10 +148,6 @@ QueryResult Executor::exec_insert(const InsertStmt& s) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// UPDATE
-// ─────────────────────────────────────────────────────────────────────────────
-
 QueryResult Executor::exec_update(const UpdateStmt& s) {
     try {
         auto [db, tbl] = resolve_table(s.table_name);
@@ -208,10 +189,6 @@ QueryResult Executor::exec_update(const UpdateStmt& s) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// DELETE
-// ─────────────────────────────────────────────────────────────────────────────
-
 QueryResult Executor::exec_delete(const DeleteStmt& s) {
     try {
         auto [db, tbl] = resolve_table(s.table_name);
@@ -236,10 +213,6 @@ QueryResult Executor::exec_delete(const DeleteStmt& s) {
     }
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// SELECT  (task 12: SUM / COUNT / AVG)
-// ─────────────────────────────────────────────────────────────────────────────
-
 QueryResult Executor::exec_select(const SelectStmt& s) {
     try {
         auto [db, tbl] = resolve_table(s.table_name);
@@ -258,7 +231,6 @@ QueryResult Executor::exec_select(const SelectStmt& s) {
         for (const auto& sc : s.columns)
             if (std::holds_alternative<AggregateCol>(sc)) { has_agg = true; break; }
 
-        // ── aggregate path ──────────────────────────────────────────────
         if (has_agg) {
             QueryResult res;
             std::vector<std::string> header_row;
@@ -330,7 +302,6 @@ QueryResult Executor::exec_select(const SelectStmt& s) {
             return res;
         }
 
-        // ── normal (non-aggregate) path ─────────────────────────────────
         // Determine output columns
         std::vector<int> col_indices;      // schema column index (-1 = not available)
         std::vector<std::string> headers;
@@ -359,7 +330,7 @@ QueryResult Executor::exec_select(const SelectStmt& s) {
             std::vector<std::string> out_row;
             for (int ci : col_indices) {
                 if (ci < (int)row.size()) out_row.push_back(column_value_to_display(row[ci]));
-                else                     out_row.push_back("NULL");
+                else out_row.push_back("NULL");
             }
             res.rows.push_back(std::move(out_row));
         }
@@ -373,10 +344,6 @@ QueryResult Executor::exec_select(const SelectStmt& s) {
         return {false, e.what()};
     }
 }
-
-// ─────────────────────────────────────────────────────────────────────────────
-// resolve_table: handles "db.table" or "table" with current db
-// ─────────────────────────────────────────────────────────────────────────────
 
 std::pair<Database*, Table*> Executor::resolve_table(const std::string& ref) {
     std::string db_name, tbl_name;
@@ -394,17 +361,13 @@ std::pair<Database*, Table*> Executor::resolve_table(const std::string& ref) {
     return {db, tbl};
 }
 
-// ─────────────────────────────────────────────────────────────────────────────
-// Expression evaluation
-// ─────────────────────────────────────────────────────────────────────────────
-
 ColumnValue Executor::eval_expr(const Expr& e, const Row& row,
                                 const TableSchema& schema) const {
     return std::visit([&](const auto& node) -> ColumnValue {
         using T = std::decay_t<decltype(node)>;
-        if constexpr (std::is_same_v<T, NullExpr>)   return NullValue{};
-        if constexpr (std::is_same_v<T, IntLitExpr>)  return node.value;
-        if constexpr (std::is_same_v<T, StrLitExpr>)  return node.value;
+        if constexpr (std::is_same_v<T, NullExpr>) return NullValue{};
+        if constexpr (std::is_same_v<T, IntLitExpr>) return node.value;
+        if constexpr (std::is_same_v<T, StrLitExpr>) return node.value;
         if constexpr (std::is_same_v<T, ColRefExpr>) {
             int ci = schema.col_index(node.name);
             if (ci < 0 || ci >= (int)row.size()) return NullValue{};
@@ -437,7 +400,6 @@ bool Executor::eval_cond(const Expr& e, const Row& row,
             ColumnValue v  = eval_expr(node->value, row, schema);
             ColumnValue lo = eval_expr(node->lo,    row, schema);
             ColumnValue hi = eval_expr(node->hi,    row, schema);
-            // [lo, hi)
             return compare_values(lo, CmpOp::LE, v) &&
                    compare_values(v,  CmpOp::LT, hi);
         }
@@ -464,12 +426,12 @@ bool Executor::compare_values(const ColumnValue& lhs, CmpOp op,
     if (is_int(lhs) && is_int(rhs)) {
         int64_t l = get_int(lhs), r = get_int(rhs);
         switch (op) {
-            case CmpOp::EQ:  return l == r;
+            case CmpOp::EQ: return l == r;
             case CmpOp::NEQ: return l != r;
-            case CmpOp::LT:  return l <  r;
-            case CmpOp::GT:  return l >  r;
-            case CmpOp::LE:  return l <= r;
-            case CmpOp::GE:  return l >= r;
+            case CmpOp::LT: return l <  r;
+            case CmpOp::GT: return l >  r;
+            case CmpOp::LE: return l <= r;
+            case CmpOp::GE: return l >= r;
         }
     }
     // Both string
@@ -477,12 +439,12 @@ bool Executor::compare_values(const ColumnValue& lhs, CmpOp op,
         const std::string& l = get_string(lhs);
         const std::string& r = get_string(rhs);
         switch (op) {
-            case CmpOp::EQ:  return l == r;
+            case CmpOp::EQ: return l == r;
             case CmpOp::NEQ: return l != r;
-            case CmpOp::LT:  return l <  r;
-            case CmpOp::GT:  return l >  r;
-            case CmpOp::LE:  return l <= r;
-            case CmpOp::GE:  return l >= r;
+            case CmpOp::LT: return l <  r;
+            case CmpOp::GT: return l >  r;
+            case CmpOp::LE: return l <= r;
+            case CmpOp::GE: return l >= r;
         }
     }
     return false;
@@ -491,12 +453,12 @@ bool Executor::compare_values(const ColumnValue& lhs, CmpOp op,
 std::string Executor::agg_col_header(const AggregateCol& a) {
     std::string fn;
     switch (a.func) {
-        case AggFunc::SUM:   fn = "SUM";   break;
+        case AggFunc::SUM: fn = "SUM";   break;
         case AggFunc::COUNT: fn = "COUNT"; break;
-        case AggFunc::AVG:   fn = "AVG";   break;
+        case AggFunc::AVG: fn = "AVG";   break;
     }
     std::string inner = a.col_name.value_or("*");
-    std::string base  = fn + "(" + inner + ")";
+    std::string base = fn + "(" + inner + ")";
     return a.alias.value_or(base);
 }
 

@@ -23,8 +23,7 @@ void Database::discover_tables() {
     for (const auto& entry : std::filesystem::directory_iterator(_path)) {
         if (entry.path().extension() != ".json") continue;
         const std::string stem = entry.path().stem().string();
-        if (stem == "strings") continue; // that's the string pool
-        // Load schema from file to get column definitions
+        if (stem == "strings") continue;
         std::ifstream f(entry.path());
         if (!f) continue;
         nlohmann::json j;

@@ -5,8 +5,6 @@ namespace db {
 
 Parser::Parser(std::vector<Token> tokens) : _tokens(std::move(tokens)) {}
 
-// ── token helpers ─────────────────────────────────────────────────────────────
-
 const Token& Parser::peek(size_t ahead) const {
     size_t idx = _pos + ahead;
     if (idx >= _tokens.size()) return _tokens.back(); // END
@@ -50,8 +48,8 @@ Statement Parser::parse_statement() {
     const Token& t = peek();
     switch (t.type) {
         case TokenType::KW_CREATE: return parse_create();
-        case TokenType::KW_DROP:   return parse_drop();
-        case TokenType::KW_USE:    return parse_use();
+        case TokenType::KW_DROP: return parse_drop();
+        case TokenType::KW_USE: return parse_use();
         case TokenType::KW_INSERT: return parse_insert();
         case TokenType::KW_UPDATE: return parse_update();
         case TokenType::KW_DELETE: return parse_delete();
@@ -129,7 +127,7 @@ ColDefNode Parser::parse_col_def() {
     }
     // optional constraints (any order, any number)
     while (true) {
-        if (check(TokenType::KW_NOT_NULL))  { consume(); cd.not_null = true; }
+        if (check(TokenType::KW_NOT_NULL)) { consume(); cd.not_null = true; }
         else if (check(TokenType::KW_INDEXED)) { consume(); cd.indexed = true; }
         else if (check(TokenType::KW_DEFAULT)) {
             consume();
@@ -149,7 +147,6 @@ ColDefNode Parser::parse_col_def() {
     return cd;
 }
 
-// ── DML ───────────────────────────────────────────────────────────────────────
 
 InsertStmt Parser::parse_insert() {
     expect(TokenType::KW_INSERT);
@@ -269,7 +266,6 @@ SelectCol Parser::parse_select_col() {
     return RegularCol{name, alias};
 }
 
-// ── Condition grammar (OR > AND > primary) ───────────────────────────────────
 
 Expr Parser::parse_condition() {
     Expr left = parse_and();
@@ -321,8 +317,8 @@ Expr Parser::parse_primary_cond() {
 
     // comparison operators
     CmpOp op;
-    bool  is_cmp = false;
-    if      (match(TokenType::OP_EQ))  { op = CmpOp::EQ;  is_cmp = true; }
+    bool is_cmp = false;
+    if (match(TokenType::OP_EQ))  { op = CmpOp::EQ;  is_cmp = true; }
     else if (match(TokenType::OP_NEQ)) { op = CmpOp::NEQ; is_cmp = true; }
     else if (match(TokenType::OP_LE))  { op = CmpOp::LE;  is_cmp = true; }
     else if (match(TokenType::OP_GE))  { op = CmpOp::GE;  is_cmp = true; }
@@ -338,8 +334,6 @@ Expr Parser::parse_primary_cond() {
     throw ParseError("Expected comparison operator or BETWEEN/LIKE in condition near '" +
                      peek().value + "' line " + std::to_string(peek().line));
 }
-
-// ── value expressions ─────────────────────────────────────────────────────────
 
 Expr Parser::parse_value_expr() {
     const Token& t = peek();
