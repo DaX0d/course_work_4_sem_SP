@@ -161,26 +161,32 @@ QueryResult Executor::exec_update(const UpdateStmt& s) {
             assignments.push_back({idx, expr});
         }
 
-        auto rows = tbl->scan_all();
-        int updated = 0;
-        for (auto& [row_id, row] : rows) {
-            if (s.where && !eval_cond(*s.where, row, schema)) continue;
-
-            Row new_row = row;
-            for (auto& [ci, expr] : assignments) {
-                ColumnValue cv = eval_expr(expr, row, schema);
-                const ColumnDef& cd = schema.columns[ci];
-                if (cd.not_null && is_null(cv))
-                    throw DbError("NOT_NULL constraint violated for: " + cd.name);
-                new_row[ci] = std::move(cv);
+        //  Pass 1: stream through the file, collect only MATCHING (id, new_row)
+        // Memory used: O(matched), not O(total).
+        std::vector<std::pair<int64_t, Row>> updates;
+        {
+            auto sc = tbl->make_scanner();
+            while (auto entry = sc.next()) {
+                auto& [row_id, row] = *entry;
+                if (s.where && !eval_cond(*s.where, row, schema)) continue;
+                Row new_row = row;
+                for (auto& [ci, expr] : assignments) {
+                    ColumnValue cv = eval_expr(expr, row, schema);
+                    const ColumnDef& cd = schema.columns[ci];
+                    if (cd.not_null && is_null(cv))
+                        throw DbError("NOT_NULL constraint violated for: " + cd.name);
+                    new_row[ci] = std::move(cv);
+                }
+                updates.push_back({row_id, std::move(new_row)});
             }
-            tbl->update_row(row_id, new_row);
-            ++updated;
-        }
+        } // scanner + its file handle are destroyed here
+
+        // Pass 2: apply updates (file re-opened per update_row call)
+        for (auto& [rid, nr] : updates) tbl->update_row(rid, nr);
 
         tbl->save();
         db->access_log().log(_sm.current_db_name(), s.table_name, "UPDATE", true);
-        return {true, "Updated " + std::to_string(updated) + " row(s)"};
+        return {true, "Updated " + std::to_string(updates.size()) + " row(s)"};
     } catch (const DbError& e) {
         if (_sm.has_current_db())
             _sm.current_db()->access_log().log(
@@ -194,17 +200,24 @@ QueryResult Executor::exec_delete(const DeleteStmt& s) {
         auto [db, tbl] = resolve_table(s.table_name);
         const TableSchema& schema = tbl->schema();
 
-        auto rows = tbl->scan_all();
-        int deleted = 0;
-        for (auto& [row_id, row] : rows) {
-            if (s.where && !eval_cond(*s.where, row, schema)) continue;
-            tbl->erase_row(row_id);
-            ++deleted;
-        }
+        // ── Pass 1: stream through file, collect only matching row_ids.
+        // Memory used: O(matched) × 8 bytes — no row data stored.
+        std::vector<int64_t> to_delete;
+        {
+            auto sc = tbl->make_scanner();
+            while (auto entry = sc.next()) {
+                if (!s.where || eval_cond(*s.where, entry->second, schema))
+                    to_delete.push_back(entry->first);
+                // entry goes out of scope here — row data freed immediately
+            }
+        } // scanner destroyed, file closed
+
+        // ── Pass 2: erase (each call does one index lookup + one seek)
+        for (int64_t rid : to_delete) tbl->erase_row(rid);
 
         tbl->save();
         db->access_log().log(_sm.current_db_name(), s.table_name, "DELETE", true);
-        return {true, "Deleted " + std::to_string(deleted) + " row(s)"};
+        return {true, "Deleted " + std::to_string(to_delete.size()) + " row(s)"};
     } catch (const DbError& e) {
         if (_sm.has_current_db())
             _sm.current_db()->access_log().log(
@@ -218,96 +231,92 @@ QueryResult Executor::exec_select(const SelectStmt& s) {
         auto [db, tbl] = resolve_table(s.table_name);
         const TableSchema& schema = tbl->schema();
 
-        // Collect matching rows
-        auto all_rows = tbl->scan_all();
-        std::vector<std::pair<int64_t, Row>> matched;
-        for (auto& pr : all_rows) {
-            if (!s.where || eval_cond(*s.where, pr.second, schema))
-                matched.push_back(pr);
-        }
-
-        // Determine if any aggregate function is present
+        // Determine if any aggregate function is requested
         bool has_agg = false;
         for (const auto& sc : s.columns)
             if (std::holds_alternative<AggregateCol>(sc)) { has_agg = true; break; }
 
+        //  Aggregate path: O(1) memory only running totals kept in RAM.
+        // The file is read once; no row is ever stored.
         if (has_agg) {
-            QueryResult res;
-            std::vector<std::string> header_row;
-            std::vector<std::string> value_row;
+            // Accumulators per column descriptor
+            struct AggState { int64_t sum = 0; int64_t cnt = 0; int64_t total = 0; };
+            std::vector<AggState> states(s.columns.size());
 
-            for (const auto& sc : s.columns) {
+            auto sc = tbl->make_scanner();
+            while (auto entry = sc.next()) {
+                auto& [row_id, row] = *entry;
+                if (s.where && !eval_cond(*s.where, row, schema)) continue;
+
+                for (size_t i = 0; i < s.columns.size(); ++i) {
+                    std::visit([&](const auto& col) {
+                        using T = std::decay_t<decltype(col)>;
+                        if constexpr (std::is_same_v<T, AggregateCol>) {
+                            ++states[i].total;
+                            int ci = col.col_name ? schema.col_index(*col.col_name) : -1;
+                            bool valid_cell = ci >= 0 && ci < (int)row.size() && !is_null(row[ci]);
+                            if (col.func == AggFunc::COUNT) {
+                                if (!col.col_name) ++states[i].cnt;         // COUNT(*)
+                                else if (valid_cell) ++states[i].cnt;       // COUNT(col)
+                            } else if (valid_cell && is_int(row[ci])) {
+                                states[i].sum += get_int(row[ci]);
+                                ++states[i].cnt;
+                            }
+                        } else if constexpr (std::is_same_v<T, StarCol>) {
+                            ++states[i].total; // COUNT(*) via StarCol
+                        }
+                    }, s.columns[i]);
+                }
+            } // scanner destroyed here
+
+            // Build single-row result from accumulators
+            QueryResult res;
+            for (size_t i = 0; i < s.columns.size(); ++i) {
                 std::visit([&](const auto& col) {
                     using T = std::decay_t<decltype(col)>;
                     if constexpr (std::is_same_v<T, StarCol>) {
-                        // star inside aggregate context → COUNT(*)
-                        header_row.push_back("COUNT(*)");
-                        value_row.push_back(std::to_string(matched.size()));
+                        res.headers.push_back("COUNT(*)");
+                        res.rows.resize(1);
+                        res.rows[0].push_back(std::to_string(states[i].total));
                     } else if constexpr (std::is_same_v<T, RegularCol>) {
-                        // mix: show first value
-                        header_row.push_back(col.alias.value_or(col.name));
-                        int ci = schema.col_index(col.name);
-                        if (!matched.empty() && ci >= 0 && ci < (int)matched[0].second.size())
-                            value_row.push_back(column_value_to_display(matched[0].second[ci]));
-                        else
-                            value_row.push_back("NULL");
+                        res.headers.push_back(col.alias.value_or(col.name));
+                        res.rows.resize(1);
+                        res.rows[0].push_back("NULL");
                     } else if constexpr (std::is_same_v<T, AggregateCol>) {
-                        header_row.push_back(agg_col_header(col));
+                        res.headers.push_back(agg_col_header(col));
+                        res.rows.resize(1);
                         switch (col.func) {
-                            case AggFunc::COUNT: {
-                                if (!col.col_name) {
-                                    value_row.push_back(std::to_string(matched.size()));
+                            case AggFunc::COUNT:
+                                res.rows[0].push_back(std::to_string(states[i].cnt));
+                                break;
+                            case AggFunc::SUM:
+                                res.rows[0].push_back(std::to_string(states[i].sum));
+                                break;
+                            case AggFunc::AVG:
+                                if (states[i].cnt == 0) {
+                                    res.rows[0].push_back("NULL");
                                 } else {
-                                    int ci = schema.col_index(*col.col_name);
-                                    size_t cnt = 0;
-                                    for (auto& [id, row] : matched)
-                                        if (ci >= 0 && ci < (int)row.size() && !is_null(row[ci]))
-                                            ++cnt;
-                                    value_row.push_back(std::to_string(cnt));
-                                }
-                                break;
-                            }
-                            case AggFunc::SUM: {
-                                int ci = col.col_name ? schema.col_index(*col.col_name) : -1;
-                                int64_t sum = 0;
-                                for (auto& [id, row] : matched)
-                                    if (ci >= 0 && ci < (int)row.size() && is_int(row[ci]))
-                                        sum += get_int(row[ci]);
-                                value_row.push_back(std::to_string(sum));
-                                break;
-                            }
-                            case AggFunc::AVG: {
-                                int ci = col.col_name ? schema.col_index(*col.col_name) : -1;
-                                int64_t sum = 0; int64_t cnt = 0;
-                                for (auto& [id, row] : matched)
-                                    if (ci >= 0 && ci < (int)row.size() && is_int(row[ci]))
-                                        { sum += get_int(row[ci]); ++cnt; }
-                                if (cnt == 0) value_row.push_back("NULL");
-                                else {
                                     std::ostringstream oss;
                                     oss << std::fixed << std::setprecision(2)
-                                        << (static_cast<double>(sum) / cnt);
-                                    value_row.push_back(oss.str());
+                                        << (static_cast<double>(states[i].sum) / states[i].cnt);
+                                    res.rows[0].push_back(oss.str());
                                 }
                                 break;
-                            }
                         }
                     }
-                }, sc);
+                }, s.columns[i]);
             }
-
-            res.headers = header_row;
-            res.rows.push_back(value_row);
             db->access_log().log(_sm.current_db_name(), s.table_name, "SELECT", true);
             return res;
         }
 
-        // Determine output columns
-        std::vector<int> col_indices;      // schema column index (-1 = not available)
-        std::vector<std::string> headers;
-
+        // Normal path: stream rows, keep only matching ones.
+        // Memory used: O(matched), unmatched rows never enter RAM.
         bool has_star = !s.columns.empty() &&
                         std::holds_alternative<StarCol>(s.columns[0]);
+
+        std::vector<int> col_indices;
+        std::vector<std::string> headers;
         if (has_star) {
             for (size_t i = 0; i < schema.columns.size(); ++i) {
                 col_indices.push_back(static_cast<int>(i));
@@ -326,14 +335,20 @@ QueryResult Executor::exec_select(const SelectStmt& s) {
 
         QueryResult res;
         res.headers = headers;
-        for (auto& [row_id, row] : matched) {
-            std::vector<std::string> out_row;
-            for (int ci : col_indices) {
-                if (ci < (int)row.size()) out_row.push_back(column_value_to_display(row[ci]));
-                else out_row.push_back("NULL");
+        {
+            auto sc = tbl->make_scanner();
+            while (auto entry = sc.next()) {
+                auto& [row_id, row] = *entry;
+                if (s.where && !eval_cond(*s.where, row, schema)) continue;
+                // Project only requested columns
+                std::vector<std::string> out_row;
+                out_row.reserve(col_indices.size());
+                for (int ci : col_indices)
+                    out_row.push_back(ci < (int)row.size()
+                                      ? column_value_to_display(row[ci]) : "NULL");
+                res.rows.push_back(std::move(out_row));
             }
-            res.rows.push_back(std::move(out_row));
-        }
+        } // scanner destroyed here
 
         db->access_log().log(_sm.current_db_name(), s.table_name, "SELECT", true);
         return res;
